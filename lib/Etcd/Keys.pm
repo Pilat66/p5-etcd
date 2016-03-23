@@ -17,10 +17,30 @@ sub _build__keys_endpoint {
     shift->version_prefix . '/keys';
 }
 
+sub try_call{
+  my $self = shift;
+  my $sub = shift;
+  my @arg = @_; # try {} clean @_
+  my $res;
+  try{
+      $self->$sub(@arg);
+      $res = 1;
+  }
+  catch {
+    
+  };
+  return $res;
+}
+
 sub set {
     my ($self, $key, $value, %args) = @_;
     croak 'usage: $etcd->set($key, $value, [%args])' if grep { !defined } ($key, $value);
     Etcd::Response->new_from_http($self->api_exec($self->_keys_endpoint.$key, 'PUT', %args, value => $value));
+}
+
+sub try_set {
+  my $self = shift;
+  return $self->try_call('set', @_);
 }
 
 sub get {
@@ -35,11 +55,57 @@ sub delete {
     Etcd::Response->new_from_http($self->api_exec($self->_keys_endpoint.$key, 'DELETE', %args));
 }
 
+sub try_delete {
+  my $self = shift;
+  return $self->try_call('delete', @_);
+}
+
+
 sub compare_and_swap {
     my ($self, $key, $value, $prev_value, %args) = @_;
     croak 'usage: $etcd->compare_and_swap($key, $value, $prev_value, [%args])' if grep { !defined } ($key, $value, $prev_value);
     $self->set($key, $value, %args, prevValue => $prev_value);
 }
+
+sub try_compare_and_swap {
+  my $self = shift;
+  return $self->try_call('compare_and_swap', @_);
+}
+
+
+sub compare_and_swap_ex {
+    my ($self, $key, $value, %args) = @_;
+    croak 'usage: $etcd->compare_and_swap_ex($key, $value, [%args])' if grep { !defined } ($key, $value);
+    $self->set($key, $value, %args,);
+}
+
+sub try_compare_and_swap_ex {
+  my $self = shift;
+  return $self->try_call('compare_and_swap_ex', @_);
+}
+
+
+sub compare_and_swap_if_exists {
+    my ($self, $key, $value, %args) = @_;
+    return $self->compare_and_swap_ex($key, $value, prevExtst=>'true', %args);
+}
+
+sub try_compare_and_swap_if_exists {
+  my $self = shift;
+  return $self->try_call('compare_and_swap_if_exists', @_);
+}
+
+sub compare_and_swap_unless_exists {
+    my ($self, $key, $value, %args) = @_;
+    return $self->compare_and_swap_ex($key, $value, prevExtst=>'false', %args);
+}
+
+sub try_compare_and_swap_unless_exists {
+  my $self = shift;
+  return $self->try_call('compare_and_swap_unless_exists', @_);
+}
+
+
 
 sub compare_and_delete {
     my ($self, $key, $prev_value, %args) = @_;
@@ -47,17 +113,35 @@ sub compare_and_delete {
     $self->delete($key, %args, prevValue => $prev_value);
 }
 
+sub try_compare_and_delete {
+  my $self = shift;
+  return $self->try_call('compare_and_delete', @_);
+}
+
+
 sub create {
     my ($self, $key, $value, %args) = @_;
     croak 'usage: $etcd->create($key, $value, [%args])' if grep { !defined } ($key, $value);
     $self->set($key, $value, %args, prevExist => 'false');
 }
 
+sub try_create {
+  my $self = shift;
+  return $self->try_call('create', @_);
+}
+
+
 sub update {
     my ($self, $key, $value, %args) = @_;
     croak 'usage: $etcd->update($key, $value, [%args])' if grep { !defined } ($key, $value);
     $self->set($key, $value, %args, prevExist => 'true');
 }
+
+sub try_update {
+  my $self = shift;
+  return $self->try_call('update', @_);
+}
+
 
 sub exists {
     my ($self, $key, %args) = @_;
@@ -79,17 +163,36 @@ sub create_dir {
     Etcd::Response->new_from_http($self->api_exec($self->_keys_endpoint.$key, 'PUT', %args, dir => 'true'));
 }
 
+sub try_create_dir {
+  my $self = shift;
+  return $self->try_call('create_dir', @_);
+}
+
+
 sub delete_dir {
     my ($self, $key, %args) = @_;
     croak 'usage: $etcd->delete_dir($key, [%args])' if !defined $key;
     $self->delete($key, %args, dir => 'true');
 }
 
+sub try_delete_dir {
+  my $self = shift;
+  return $self->try_call('delete_dir', @_);
+}
+
+
+
 sub create_in_order {
     my ($self, $key, $value, %args) = @_;
     croak 'usage: $etcd->create_in_order($key, $value, [%args])' if grep { !defined } ($key, $value);
     Etcd::Response->new_from_http($self->api_exec($self->_keys_endpoint.$key, 'POST', %args, value => $value));
 }
+
+sub try_create_in_order {
+  my $self = shift;
+  return $self->try_call('create_in_order', @_);
+}
+
 
 sub watch {
     my ($self, $key, %args) = @_;
@@ -116,36 +219,63 @@ Etcd::Keys - etcd key space API
     
     # set value for key
     $etcd->set("/message", "hello world");
+    $etcd->try_set("/message", "hello world");
     
     # get key
     my $response = $etcd->get("/message");
     
     # delete key
     $etcd->delete("/message");
+    $etcd->try_delete("/message");
     
     # atomic compare-and-swap value for key
     $etcd->compare_and_swap("/message", "new", "old");
+    $etcd->try_compare_and_swap("/message", "new", "old");
+    
+    # atomic compare-and-swap value for key with additional parameters
+    $etcd->compare_and_swap_ex("/message", "new",);
+    $etcd->try_compare_and_swap_ex("/message", "new",);
+    
+    # atomic compare-and-swap prevExist=>true
+    $etcd->compare_and_swap_if_exists("/message", "new",);
+    $etcd->try_compare_and_swap_if_exists("/message", "new",);
+
+    # atomic compare-and-swap prevExist=>false
+    $etcd->compare_and_swap_unless_exists("/message", "new",);
+    $etcd->try_compare_and_swap_unless_exists("/message", "new",);
     
     # atomic compare-and-delete key
     $etcd->compare_and_delete("/message", "old");
     
     # create key. like set, but fails if the key exists
     $etcd->create("/message", "value");
+
+    # create key. like create(), but returns false if the key exists - NOT raise exception
+    if($etcd->try_create("/message", "value")){
+      say "Ok";
+    }
+    else {
+      say "Failed";
+    }
     
     # update key. like set, but fails if the key doesn't exist
     $etcd->update("/message", "value");
+    $etcd->try_update("/message", "value");
     
     # check if key exists
     my $exists = $etcd->exists("/message");
     
     # create dir, a "valueless" key to hold subkeys
     $etcd->create_dir("/dir");
+    $etcd->try_create_dir("/dir");
     
     # delete key and everything under it
     $etcd->delete_dir("/dir");
+    $etcd->try_delete_dir("/dir");
     
     # atomically create in-order key
     $etcd->create_in_order("/dir", "value");
+    $etcd->try_create_in_order("/dir", "value");
     
     # block until key changes
     $etcd->watch("/message");
@@ -160,6 +290,21 @@ All methods except C<exists> returns a L<Etcd::Response> object on success and
 C<die> on error. On error, C<$@> will contain either a reference to a
 L<Etcd::Error> object (for API-level errors) or a regular string (for network,
 transport or other errors).
+
+Many methods has a 'try_*' synonym. It return true on success and false on error,
+in contrast to standard methods. The difference between them can be seen in this example:
+
+  # '/message' key' does not exists
+  try {
+    $etcd->C<update>('/message', 'new'); 
+  }
+  catch {
+    warn $_;
+  }
+
+  unless( $etcd->C<try_update>('/message', 'new'){
+    warn "'/message' key' does not exists";
+  }
 
 All methods can take any number of additional arguments in C<key =E<gt> value>
 form. These are added to the query parameters in the URL that gets submitted to
@@ -177,8 +322,10 @@ ignored because that's how the value is passed internally.
 =item *
 
 C<set>
+C<try_set>
 
     $etcd->set("/message", "hello world");
+    $etcd->try_set("/message", "hello world");
 
 Set a value for a key. The key will be created if it doesn't exist.
 
@@ -197,8 +344,10 @@ This invokes the C<GET> method for the given key.
 =item *
 
 C<delete>
+C<try_delete>
 
     $etcd->delete("/message");
+    $etcd->try_delete("/message");
 
 Delete a key.
 
@@ -207,19 +356,62 @@ This invokes the C<DELETE> method for the given key.
 =item *
 
 C<compare_and_swap>
+C<try_compare_and_swap>
 
     $etcd->compare_and_swap("/message", "new", "old");
+    $etcd->try_compare_and_swap("/message", "new", "old");
 
 Atomic compare-and-swap the value of a key.
 
 This invokes the C<PUT> method for the given key with the C<prevValue> query
 parameter.
 
+
+=item *
+
+C<compare_and_swap_ex>
+C<try_compare_and_swap_ex>
+
+    $etcd->compare_and_swap_ex("/message", "new", [%arg]);
+    $etcd->try_compare_and_swap_ex("/message", "new", [%arg]);
+
+Atomic compare-and-swap the value of a key.
+
+This invokes the C<PUT> method for the given key with any additional parameters - prevExist, as example.
+
+
+=item *
+
+C<compare_and_swap_if_exists>
+C<try_compare_and_swap_if_exists>
+
+    $etcd->compare_and_swap_if_exists("/message", "new", [%arg]);
+    $etcd->try_compare_and_swap_if_exists("/message", "new", [%arg]);
+
+Atomic compare-and-swap the value of a key with prevExist=>true
+
+This invokes the C<PUT> method for the given key with additional parameters - prevExist=>true.
+
+
+=item *
+
+C<compare_and_swap_unless_exists>
+C<try_compare_and_swap_unless_exists>
+
+    $etcd->compare_and_swap_unless_exists("/message", "new", [%arg]);
+    $etcd->try_compare_and_swap_unless_exists("/message", "new", [%arg]);
+
+Atomic compare-and-swap the value of a key with prevExist=>false
+
+This invokes the C<PUT> method for the given key with additional parameters - prevExist=>false.
+
 =item *
 
 C<compare_and_delete>
+C<try_compare_and_delete>
 
     $etcd->compare_and_delete("/message", "old");
+    $etcd->try_compare_and_delete("/message", "old");
 
 Atomic compare-and-delete the value of a key.
 
@@ -229,8 +421,10 @@ parameter.
 =item *
 
 C<create>
+C<try_create>
 
     $etcd->create("/message", "value");
+    $etcd->try_create("/message", "value");
 
 Create a key. Like set, but fails if the key exists.
 
@@ -240,8 +434,10 @@ parameter set to C<false>.
 =item *
 
 C<update>
+C<try_update>
 
-    $etcd->update("/message", "value");
+    $etcd->create("/message", "value");
+    $etcd->try_create("/message", "value");
 
 Update the value of a key. Like set, but fails if the key doesn't exist.
 
@@ -263,8 +459,10 @@ This invokes the C<GET> method for the given key.
 =item *
 
 C<create_dir>
+C<try_create_dir>
 
     $etcd->create_dir("/dir");
+    $etcd->try_create_dir("/dir");
 
 Creates a directory, a "valueless" key to hold sub-keys.
 
@@ -274,8 +472,10 @@ parameter set to C<true>.
 =item *
 
 C<delete_dir>
+C<try_delete_dir>
 
     $etcd->delete_dir("/dir");
+    $etcd->try_delete_dir("/dir");
 
 Deletes a key and all its sub-keys.
 
@@ -284,9 +484,11 @@ parameter set to C<true>.
 
 =item *
 
-C<create_dir>
+C<create_in_order>
+C<try_create_in_order>
 
     $etcd->create_in_order("/dir", "value");
+    $etcd->try_create_in_order("/dir", "value");
 
 Atomically creates an in-order key.
 
